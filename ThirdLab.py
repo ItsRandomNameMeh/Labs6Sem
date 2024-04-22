@@ -1,4 +1,16 @@
 import math
+import simpy
+import numpy as np
+import random
+
+NO_OF_BUSINESS = int(input("Введите количество компаний, участвующих в "
+                       "моделировании: "))
+NO_OF_MANAGERS = 10  # manager counts
+service_wait_time = []  #list to hold the time until a manager is available and will be to server the customer
+invite_wait_time = []    #list to hold the time until the queue pass
+
+
+
 def num1():
     print("\n\nTask1")
     lyam, T = read_input_from_file("Num1.txt")
@@ -46,8 +58,6 @@ def num4():
     print("Вероятность обслуживания: "+str(round(a,3))+"\n Вероятность отказа: "+str(round(b,3))+"\n Их отношение: "+str(round(a/b,3))+
           "\n Пропускна способсность: "+str(APS))
 
-
-
 def num5():
     print("\n\nTask5")
     lyam, T = read_input_from_file("Num5.txt")
@@ -73,7 +83,6 @@ def num5():
               "\n Среднее время нахождения заявок в СМО: "+str(round(T_smo,3)))
     else:
         print("Постепенно очередь станет бесконечной, т.к po n = " + str(pon))
-
 
 def num6():
     print("\n\nTask6")
@@ -108,6 +117,7 @@ def num6():
           "\n Среднее время нахождения заявки в СМО: " + str(round(T_smo,3)),
           "\n Среднее число занятых каналов: " + str(round(k_mid,3)))
 
+
 def read_input_from_file(filename):
     with open(filename, 'r') as file:
             lines = file.readlines()
@@ -115,12 +125,103 @@ def read_input_from_file(filename):
             second_param = float(lines[1].strip())
     return first_param, second_param
 
-num1()
+
+
+
+
+
+def PartTwo():
+    m = 1 #company counts to 1 manager
+    lyam = 0.9
+    T = 45
+    xmin = 0.6
+    xmax = 1.5
+    best = 3.9
+    myu = 1/T
+    p_intensiv = lyam/myu
+    env = simpy.Environment()
+    manager = simpy.Resource(env, NO_OF_MANAGERS)
+    L_queue = p_intensiv ** 2 / (1 - p_intensiv)
+    T_queue = L_queue / lyam
+    generate_company(env, manager, xmin,xmax,best)
+    time_interv(xmin, xmax, best)
+    print("\n\nС %s менеджерами и %s компаниями..." % (NO_OF_MANAGERS, NO_OF_BUSINESS))
+    print("Среднее время ожидания: %.1f минут." % (np.mean(service_wait_time)))
+    print("Среднее время обслуживания: %.1f минут." % (np.mean(invite_wait_time)))
+
+
+def time_interv(xmin, xmax, best):
+    time_to_service = random.triangular(xmin, xmax, best)
+    print(time_to_service)
+
+
+def convert_to_hours(minutes):
+    minutes %= 60
+    return int(minutes)
+def generate_company(env, manager, xmin, xmax, best):
+    for i in range(NO_OF_BUSINESS):
+        yield env.timeout(random.randint(xmin,xmax))
+        env.process(company(env, i, company(env,i,xmin, xmax,best)))
+
+def company(env, name, manager, xmin, xmax, best):
+    minutes = convert_to_hours(env.now)
+    print("Компания %s прибылаќ в %.1f" % (name, minutes))
+    with manager.request() as req:
+        start_time = env.now
+        yield req
+        invite_wait_time.append(env.now - start_time)
+        time_to_service = random.triangular(xmin, xmax, best)
+        yield env.timeout(time_to_service)
+        print("Компания %s обслужена за %.1f минут" % (name, env.now - start_time))
+        service_wait_time.append(env.now - start_time)
+
+PartTwo()
+
+
+
+
+
+lyam = 0.5  # интенсивность потока заявок
+μ = 1/1.2  # интенсивность обслуживания
+
+
+def source(env, lyam, server):
+    """Генератор заявок"""
+    i = 0
+    while True:
+        yield env.timeout(np.random.exponential(1/lyam))
+        i += 1
+        print(f'Заявка {i} поступила в {convert_to_hours(env.now)}')
+        env.process(customer(env, f'Автомобиль {i}', server))
+
+def customer(env, name, server):
+    """Заявка"""
+    arrive = env.now
+    if server.count == 0:  # если сервер свободен, начинаем обслуживание
+        with server.request() as req:
+            service_time = np.random.exponential(1/μ)
+            print(f'{name} начал обслуживание в {convert_to_hours(arrive)}, время обслуживания {round(service_time,3)}')
+            yield req
+            yield env.timeout(service_time)
+            print(f'{name} закончил обслуживание в {convert_to_hours(env.now)}')
+def convert_to_hours(minutes):
+    hours = minutes // 60
+    minutes %= 60
+    return int(hours), int(minutes)
+# Инициализация SimPy
+env = simpy.Environment()
+server = simpy.Resource(env, capacity=1)  # одноканальная СМО
+env.process(source(env, lyam, server))
+env.run(until=100)  # моделирование на протяжении 100 часов
+
+
+
+#num1()
 num2()
-num3()
-num4()
-num5()
-num6()
+#num3()
+#num4()
+#num5()
+#num6()
 
 
 
